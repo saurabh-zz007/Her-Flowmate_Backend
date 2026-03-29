@@ -5,24 +5,20 @@ from starlette.requests import Request
 from starlette.middleware.sessions import SessionMiddleware
 import uvicorn
 from pydantic import BaseModel
-from dotenv import load_dotenv
-import os
 from src.user.models import authData
 from google.oauth2 import id_token
 from google.auth.transport import requests
 
-from src.utils import settings
+from src.utils.settings import settings
 
 app = FastAPI(title="Her-Flowmate")
-load_dotenv()
-
 
 @app.post("/auth")
 def authentication(request: Request, auth_data: authData):
     try:
         # Specify the CLIENT_ID of the app that accesses the backend:
         user = id_token.verify_oauth2_token(auth_data.token, requests.Request(), settings.GOOGLE_CLOUD_CLIENT_ID)
-        
+
         return {
             "email": user["email"],
             "email_verified": user["email_verified"],
