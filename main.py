@@ -7,11 +7,13 @@ import uvicorn
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import os
-from models.pydantic_models import authData
+from src.user.models import authData
 from google.oauth2 import id_token
 from google.auth.transport import requests
 
-app = FastAPI()
+from src.utils import settings
+
+app = FastAPI(title="Her-Flowmate")
 load_dotenv()
 
 
@@ -19,7 +21,7 @@ load_dotenv()
 def authentication(request: Request, auth_data: authData):
     try:
         # Specify the CLIENT_ID of the app that accesses the backend:
-        user = id_token.verify_oauth2_token(auth_data.token, requests.Request(), os.getenv("GOOGLE_CLOUD_CLIENT_ID"))
+        user = id_token.verify_oauth2_token(auth_data.token, requests.Request(), settings.GOOGLE_CLOUD_CLIENT_ID)
         
         return {
             "email": user["email"],
