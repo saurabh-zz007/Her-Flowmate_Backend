@@ -14,7 +14,7 @@ from google.auth.transport import requests
 app = FastAPI()
 load_dotenv()
 
-
+app.add_middleware(SessionMiddleware, secret_key="some-super-secret-random-string")
 
 class authData(BaseModel):
     token: str
