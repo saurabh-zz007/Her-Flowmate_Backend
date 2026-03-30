@@ -9,7 +9,7 @@ class UserModel(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String(255), unique=True, nullable=False)
     display_name = Column(String(100))
-    photo_url = Column(String)
+    photo_url = Column(String, nullable=True)
     age = Column(Integer)
     goal = Column(String(50), default='track_cycle')
     is_minimal_mode = Column(Boolean, default=False)

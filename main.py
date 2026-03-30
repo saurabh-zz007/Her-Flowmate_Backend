@@ -10,10 +10,13 @@ from google.auth.transport import requests
 from src.utils.db import Base, engine
 from src.utils.settings import settings
 from pydantic import BaseModel
-from src.user.models import UserModel
+from src.user.router import user_route
 
 Base.metadata.create_all(engine)
+
 app = FastAPI(title="Her-Flowmate")
+app.include_router(user_route)
+
 
 class authData(BaseModel):
     token: str
