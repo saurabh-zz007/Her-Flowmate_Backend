@@ -16,5 +16,14 @@ def create_periods():
 def delete_periods():
     return controllers.delete_periods()
 
+@logs_router.post("/daily")
+def update_daily_log():
+    return controllers.update_daily_log()
 
+@logs_router.get("/daily")
+def get_daily_log():
+    return controllers.get_daily_log()
 
+@logs_router.get("/trends")
+def get_trends():
+    return controllers.trends()
