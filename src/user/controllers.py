@@ -1,7 +1,5 @@
 from sqlalchemy.dialects.postgresql import UUID
-import uuid
 from src.user.data_transfer_objects import UserUpdateSchema
-from src.utils.db import local_session
 from sqlalchemy.orm import Session
 from src.user.models import UserModel
 from fastapi import HTTPException
