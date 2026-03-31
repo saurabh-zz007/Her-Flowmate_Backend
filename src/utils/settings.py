@@ -5,6 +5,8 @@ class Settings(BaseSettings):
 
     GOOGLE_CLOUD_CLIENT_ID: str
     DB_CONNECTION: str
+    ALGORITHM: str
+    SECRET_KEY: str
 
 
 settings = Settings() #type:ignore
