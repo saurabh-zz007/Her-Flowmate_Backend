@@ -32,7 +32,7 @@ def authentication(request: Request, auth_data: authData, db: Session):
                 db.commit()
                 db.refresh(db_user)
 
-                token = jwt.encode({"user_id": db_user.id}, settings.SECRET_KEY, settings.ALGORITHM) # type: ignore
+                token = jwt.encode({"user_id": str(db_user.id)}, settings.SECRET_KEY, settings.ALGORITHM) # type: ignore
                 return {"token": token}
             except Exception as e:
                 db.rollback()
