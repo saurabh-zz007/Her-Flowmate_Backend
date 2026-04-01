@@ -31,14 +31,12 @@ def authentication(request: Request, auth_data: authData, db: Session):
                 db.add(db_user)
                 db.commit()
                 db.refresh(db_user)
-
-                token = jwt.encode({"user_id": str(db_user.id)}, settings.SECRET_KEY, settings.ALGORITHM) # type: ignore
-                return {"token": token}
             except Exception as e:
                 db.rollback()
                 raise HTTPException(status_code=400, detail="Error creating user: " + str(e))
-        else:
-            return {"token": ""}
+        
+        token = jwt.encode({"user_id": str(db_user.id)}, settings.SECRET_KEY, settings.ALGORITHM) # type: ignore
+        return {"token": token}
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail="Invalid token: " + str(e))

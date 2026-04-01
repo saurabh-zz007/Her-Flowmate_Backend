@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import Literal
-class UserSchema(BaseModel):
+class UserCreateSchema(BaseModel):
     id: str
     email: str
     display_name: str
@@ -16,3 +16,10 @@ class UserUpdateSchema(BaseModel):
     age: int|None = None
     goal: str|None = None
     is_minimal_mode: bool|None = None
+
+class UserResponseSchema(BaseModel):
+    display_name: str|None
+    photo_url: str|None
+    age: int|None
+    goal: str|None
+    is_minimal_mode: bool|None

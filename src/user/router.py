@@ -3,15 +3,17 @@ from src.user import controllers
 from sqlalchemy.dialects.postgresql import UUID
 import uuid 
 from src.utils.db import get_db
-from src.user.data_transfer_objects import UserUpdateSchema
+from src.user.data_transfer_objects import UserUpdateSchema, UserResponseSchema
+from src.utils.helpers import get_user_id
+
 
 user_route = APIRouter(prefix="/user")
 
-@user_route.get("/profile")
-def fetch_user(request : Request, db = Depends(get_db)):
-    return controllers.fetch_user(request, db)
+@user_route.get("/profile", response_model=UserResponseSchema)
+def fetch_user(db = Depends(get_db), user_id:uuid.UUID = Depends(get_user_id)):
+    return controllers.fetch_user(db, user_id)
 
-@user_route.put("/profile")
-def update_user(user_id: uuid.UUID, user_data: UserUpdateSchema, db = Depends(get_db)):
+@user_route.put("/profile", response_model=UserResponseSchema)
+def update_user( user_data: UserUpdateSchema,user_id: uuid.UUID = Depends(get_user_id), db = Depends(get_db)):
     print("Updating user:", user_id)
     return controllers.update_user(user_id, db, user_data)
