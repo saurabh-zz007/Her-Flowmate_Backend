@@ -1,4 +1,3 @@
-from sqlalchemy.dialects.postgresql import UUID
 from src.user.data_transfer_objects import UserUpdateSchema
 from sqlalchemy.orm import Session
 from src.user.models import UserModel
