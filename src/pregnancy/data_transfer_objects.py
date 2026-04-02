@@ -1,8 +1,11 @@
-from pydantic import BaseModel, Date
+from pydantic import BaseModel, Field
+from datetime import date
 
-class PregnancyCreateModel(BaseModel):
-    conception_date:Date
-    due_date:Date
-    weeks_at_start:int
+class PregnancySchema(BaseModel):
+    conception_date:date|None = None
+    due_date:date|None = None
+    weeks_at_start:int|None = None
+
 
     
+
