@@ -11,14 +11,11 @@ from google.auth.transport import requests as google_requests
 def authentication(request: Request, auth_data: authData, db: Session):
     auth_ids = [settings.GOOGLE_CLOUD_CLIENT_ID, settings.GOOGLE_CLOUD_CLIENT_ID_2]
     try:
-        print(f"RAW TOKEN RECEIVED: ->{auth_data.token}<-")
         # Specify the CLIENT_ID of the app that accesses the backend:
         user = id_token.verify_oauth2_token(auth_data.token, google_requests.Request(), auth_ids)
-        print(user)
         db_user = db.query(UserModel).filter(UserModel.email == user["email"]).first()
 
         if not db_user:
-            print("Creating new user")
             try:
                 db_user = UserModel(
                     email = user["email"],
