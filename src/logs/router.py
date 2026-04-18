@@ -18,7 +18,7 @@ def get_periods(db: Session = Depends(get_db), user_id: uuid.UUID = Depends(get_
 def create_periods(data: PeriodSchema, db:Session = Depends(get_db), user_id: uuid.UUID = Depends(get_user_id)):
     return controllers.create_periods(data, db, user_id)
 
-@logs_router.delete("/periods", response_model=PeriodSchema, status_code=status.HTTP_204_NO_CONTENT)
+@logs_router.delete("/periods", status_code=status.HTTP_204_NO_CONTENT)
 def delete_periods(start_date: date, db: Session = Depends(get_db), user_id: uuid.UUID = Depends(get_user_id)):
     return controllers.delete_periods(start_date, db, user_id)
 
