@@ -6,7 +6,7 @@ from src.utils.db import get_db
 auth_router = APIRouter(prefix="/auth")
 
 
-@auth_router.post("/google")
-def google_auth(request: Request, auth_data: authData, db = Depends(get_db), status_code=status.HTTP_200_OK):
+@auth_router.post("/google", status_code=status.HTTP_200_OK)
+def google_auth(request: Request, auth_data: authData, db = Depends(get_db)):
     return authentication(request, auth_data, db)
 
