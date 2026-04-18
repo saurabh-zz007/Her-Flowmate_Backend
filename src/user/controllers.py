@@ -13,7 +13,6 @@ def fetch_user( db: Session, user_id: uuid.UUID):
     return user
 
 def update_user(user_id: uuid.UUID, db: Session, user_data: UserUpdateSchema):
-    print("Updating user in controller:", user_id)
     user = db.query(UserModel).filter(UserModel.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
