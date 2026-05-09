@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, func, ForeignKey, ARRAY, Date, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, func, ForeignKey, ARRAY, Date, UniqueConstraint, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
@@ -16,6 +16,11 @@ class PeriodModel(Base):
     mood = Column(String(50))
     symptoms = Column(ARRAY(String))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint('(end_date IS NULL) OR (start_date < end_date)', name = 'check_start_date_before_end_date'),
+        CheckConstraint('(end_date IS NULL) OR(duration = (end_date - start_date))', name='check_duration')
+    )
 
 class DailyLogModel(Base):
     __tablename__ = "daily_logs"
