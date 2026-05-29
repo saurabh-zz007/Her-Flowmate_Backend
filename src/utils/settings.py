@@ -5,6 +5,7 @@ class Settings(BaseSettings):
 
     GOOGLE_CLOUD_CLIENT_ID: str
     GOOGLE_CLOUD_CLIENT_ID_2: str
+    GOOGLE_CLOUD_CLIENT_ID_3: str
     DB_CONNECTION: str
     ALGORITHM: str
     SECRET_KEY: str
