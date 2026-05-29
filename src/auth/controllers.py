@@ -9,7 +9,7 @@ import jwt
 from google.auth.transport import requests as google_requests
 
 def authentication(request: Request, auth_data: authData, db: Session):
-    auth_ids = [settings.GOOGLE_CLOUD_CLIENT_ID, settings.GOOGLE_CLOUD_CLIENT_ID_2]
+    auth_ids = [settings.GOOGLE_CLOUD_CLIENT_ID, settings.GOOGLE_CLOUD_CLIENT_ID_2, settings.GOOGLE_CLOUD_CLIENT_ID_3]
     try:
         # Specify the CLIENT_ID of the app that accesses the backend:
         user = id_token.verify_oauth2_token(auth_data.token, google_requests.Request(), auth_ids)
