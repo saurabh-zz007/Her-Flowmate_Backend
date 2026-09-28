@@ -1,0 +1,27 @@
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.orm import DeclarativeBase
+
+//New Imports
+
+Base is shifted to the class and passed AsyncAttrs, DeclarativeBase as argument
+This base is further used in making differet data models via sql alchemy
+
+Engine is now created by using create_async_engine and passed url as prev but also
+poolclass=NullPool -> Using NullPool ensures connections are borrowed and released strictly on a per-request basis.
+
+ connect_args={
+        "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
+    }, 
+statement_cache_size: 0 -> Setting it to 0 tells asyncpg to never name or store prepared statements in its internal LRU cache. Every query is executed as an unnamed, one-off statement that is discarded immediately after execution.
+prepared_statement_cache_size: 0 -> Setting this to 0 prevents SQLAlchemy from attempting to manage or track prepared statements on the connection adapter.
+
+
+local_session = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+bind=engine -> Connects the session factory to your database engine.
+class_=AsyncSession -> Tells the factory to instantiate AsyncSession objects instead of standard sync Session objects.
+xpire_on_commit=False -> Prevents SQLAlchemy from wiping an object's loaded attributes after you call await session.commit().
