@@ -25,3 +25,117 @@ local_session = async_sessionmaker(
 bind=engine -> Connects the session factory to your database engine.
 class_=AsyncSession -> Tells the factory to instantiate AsyncSession objects instead of standard sync Session objects.
 xpire_on_commit=False -> Prevents SQLAlchemy from wiping an object's loaded attributes after you call await session.commit().
+
+
+Problem with the "write" functions:
+    Problem:
+        currently they are doing approx 2-4 round trip to db in order to do the tasks, Now we are going to make it functional
+        in one round trip:
+
+        Example Old fn with 3 round trip to db:
+            async def create_pregnancy(data: PregnancySchema, user_id: uuid.UUID, db: AsyncSession):
+                try:
+                    stmt = select(PregnancyModel).where(PregnancyModel.user_id == user_id)
+                    result = await db.execute(stmt)
+                    pregnancy_data = result.scalars().first()
+
+                    if not pregnancy_data:
+                        pregnancy_data = PregnancyModel(
+                            user_id=user_id,
+                            conception_date=data.conception_date,
+                            due_date=data.due_date,
+                            weeks_at_start=data.weeks_at_start
+                        )
+                        db.add(pregnancy_data)
+                    else:
+                        for key, value in data.model_dump(exclude_unset=True).items():
+                            if value is not None:
+                                setattr(pregnancy_data, key, value)
+                    await db.commit()
+                    await db.refresh(pregnancy_data)
+                    return pregnancy_data
+                except Exception as e:
+                    await db.rollback()
+                    raise HTTPException(status_code=400, detail=f"Error creating pregnancy: {str(e)}")
+
+
+        Example Newer one with one round trip to db (justr an example, not gonna implement it like this): 
+            async def create_pregnancy(data: PregnancySchema, user_id: uuid.UUID, db: AsyncSession):
+                try:
+                    # 1. Prepare payload outside of the DB transaction
+                    payload = data.model_dump(exclude_unset=True)
+                    payload["user_id"] = user_id
+
+                    # 2. Extract fields to update if row already exists
+                    update_values = {
+                        k: v for k, v in payload.items() 
+                        if k != "user_id" and v is not None
+                    }
+
+                    # 3. Construct single atomic PostgreSQL Upsert
+                    stmt = (
+                        insert(PregnancyModel)
+                        .values(**payload)
+                        .on_conflict_do_update(
+                            index_elements=[PregnancyModel.user_id],  # Requires UNIQUE constraint or PK on user_id
+                            set_=update_values
+                        )
+                        .returning(PregnancyModel)
+                    )
+
+                    # 4. Single DB round-trip: executes write and returns updated model
+                    result = await db.execute(stmt)
+                    await db.commit()
+                    
+                    return result.scalars().one()
+
+                except Exception as e:
+                    await db.rollback()
+                    raise HTTPException(status_code=400, detail=f"Error creating pregnancy: {str(e)}")
+    
+The Bottle neck Right now:
+    1. In src/utils/db.py, poolclass=NullPool forces asyncpg to establish a brand-new TCP socket and TLS/SSL handshake to Supabase (aws-1-ap-northeast-2.pooler.supabase.com) on every single incoming HTTP request.
+        Network handshake to remote cloud databases adds 150ms–250ms of idle waiting before queries even start. Under concurrent Locust load, this single factor restricts throughput to ~10–15 RPS.
+    2. In write endpoints (update_daily_log, create_pregnancy, update_user, delete_periods), the code first fires a SELECT query across the internet just to check if a row exists, then fires the INSERT/UPDATE/DELETE.
+    3. After await db.commit(), each controller executes await db.refresh(model). This triggers another full round-trip SELECT. Since expire_on_commit=False is already configured on the session, SQLAlchemy preserves model attributes, making extra refresh calls unnecessary when combined with PostgreSQL RETURNING.
+
+Solution-1:
+    Configure pool parameters for production high-concurrency:
+    pool_size=20: Keeps 20 warm database connections ready in memory.
+    max_overflow=10: Allows bursting up to 30 concurrent connections under load spikes.
+    pool_recycle=300: Refreshes connections every 5 minutes to prevent stale disconnections from Supabase.
+    pool_pre_ping=True: Verifies connection health before use, preventing broken pipe exceptions.
+    Maintain "statement_cache_size": 0 in connect_args for full Supabase PgBouncer compatibility.
+
+Solution-2 (Atomic Upsert)(Example below, replaced all the write functions like this):
+    Current: SELECT -> check exists -> INSERT or UPDATE -> COMMIT -> REFRESH (4 round trips).
+    Optimization: Use PostgreSQL native atomic UPSERT with RETURNING:
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        stmt = (
+            pg_insert(DailyLogModel)
+            .values(user_id=user_id, **data.model_dump(exclude_unset=True))
+            .on_conflict_do_update(
+                constraint="unique_daily_log_per_user",
+                set_=data.model_dump(exclude_unset=True)
+            )
+            .returning(DailyLogModel)
+        )
+        result = await db.execute(stmt)
+        log = result.scalars().one()
+        await db.commit()
+        return log
+
+    Round trips reduced from 4 to 1 query + commit.
+
+
+    Comparison Summary
+        Endpoint / Operation	Current DB Trips	Optimized DB Trips	Technique Used
+        Connection Handshake	1 SSL handshake/req	0 (reused warm pool)	AsyncAdaptedQueuePool (size 20 + 10 overflow)
+        POST /logs/daily	4 trips (SELECT + WRITE + COMMIT + REFRESH)	1 trip + commit	Atomic ON CONFLICT DO UPDATE ... RETURNING
+        POST /pregnancy/	4 trips (SELECT + WRITE + COMMIT + REFRESH)	1 trip + commit	Atomic ON CONFLICT DO UPDATE ... RETURNING
+        PUT /user/profile	3-4 trips (SELECT + UPDATE + COMMIT + REFRESH)	1 trip + commit	Atomic UPDATE ... RETURNING
+        DELETE /logs/periods	3 trips (SELECT + DELETE + COMMIT)	1 trip + commit	Atomic DELETE ... RETURNING id
+        POST /logs/periods	3 trips (SELECT + INSERT + COMMIT + REFRESH)	2 trips (SELECT + INSERT)	Eliminated redundant db.refresh()
+
+
+        

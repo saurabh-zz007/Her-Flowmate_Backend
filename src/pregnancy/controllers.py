@@ -1,34 +1,35 @@
-from src import user
+import uuid
+from fastapi import HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.pregnancy.data_transfer_objects import PregnancySchema
 from src.pregnancy.models import PregnancyModel
-from sqlalchemy.orm import Session
-import uuid
-from fastapi import HTTPException
 
-def create_pregnancy(data: PregnancySchema, user_id: uuid.UUID, db: Session):
+async def create_pregnancy(data: PregnancySchema, user_id: uuid.UUID, db: AsyncSession):
+    payload = data.model_dump(exclude_unset=True)
+    stmt = (
+        pg_insert(PregnancyModel)
+        .values(user_id=user_id, **payload)
+        .on_conflict_do_update(
+            index_elements=[PregnancyModel.user_id],
+            set_=payload
+        )
+        .returning(PregnancyModel)
+    )
     try:
-        pregnancy_data = db.query(PregnancyModel).filter(PregnancyModel.user_id == user_id).first()
-        #if pregnancy model dont exists => Create it
-        if not pregnancy_data:
-            pregnancy_data = PregnancyModel(user_id=user_id, conception_date=data.conception_date, due_date=data.due_date, weeks_at_start=data.weeks_at_start)
-            db.add(pregnancy_data)
-        else:
-            #if it exists => Update it
-            for key, value in data.model_dump().items():
-                if value is not None:
-                    setattr(pregnancy_data, key, value)
-        db.commit()
-        db.refresh(pregnancy_data)
-    except HTTPException as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Error creating pregnancy: " + str(e))
-    return pregnancy_data
+        result = await db.execute(stmt)
+        pregnancy_data = result.scalars().one()
+        await db.commit()
+        return pregnancy_data
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=f"Error creating pregnancy: {str(e)}")
 
-def get_pregnancy(user_id: uuid.UUID, db: Session):
-    try:
-        pregnancy_data = db.query(PregnancyModel).filter(PregnancyModel.user_id == user_id).first()
-        if not pregnancy_data:
-            raise HTTPException(status_code=404, detail="Pregnancy data not found")
-    except HTTPException as e:
-        raise HTTPException(status_code=400, detail="Error fetching pregnancy data: " + str(e))
-    return pregnancy_data
+async def get_pregnancy(user_id: uuid.UUID, db: AsyncSession):
+    stmt = select(PregnancyModel).where(PregnancyModel.user_id == user_id)
+    result = await db.execute(stmt)
+    pregnancy_data = result.scalars().first()
+    if not pregnancy_data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pregnancy data not found")
+    return pregnancy_data

@@ -1,96 +1,114 @@
 import uuid
-from sqlalchemy import Column
-from sqlalchemy.orm import Session
-from src.logs.models import PeriodModel, DailyLogModel
-from typing import List
 from datetime import date, timedelta
-from src.logs.data_transfer_objects import PeriodSchema, DailyLogSchema
+from typing import List
 from fastapi import HTTPException
+from sqlalchemy import select, delete
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+from src.logs.data_transfer_objects import PeriodSchema, DailyLogSchema
+from src.logs.models import PeriodModel, DailyLogModel
 
-def get_periods(db:Session, user_id: uuid.UUID):
-    logs = db.query(PeriodModel).filter(PeriodModel.user_id == user_id).order_by(PeriodModel.start_date).all()
+async def get_periods(db: AsyncSession, user_id: uuid.UUID) -> List[PeriodModel]:
+    stmt = select(PeriodModel).where(PeriodModel.user_id == user_id).order_by(PeriodModel.start_date)
+    result = await db.execute(stmt)
+    logs = list(result.scalars().all())
     if not logs:
         raise HTTPException(status_code=404, detail="No periods found")
     return logs
 
-def create_periods(data: PeriodSchema, db:Session, user_id: uuid.UUID):
-    period = db.query(PeriodModel).filter(PeriodModel.user_id == user_id, PeriodModel.start_date == data.start_date).first()
+async def create_periods(data: PeriodSchema, db: AsyncSession, user_id: uuid.UUID) -> PeriodModel:
+    stmt = select(PeriodModel).where(PeriodModel.user_id == user_id, PeriodModel.start_date == data.start_date)
+    result = await db.execute(stmt)
+    period = result.scalars().first()
 
     if period:
         raise HTTPException(status_code=400, detail="Period log for this start date already exists")
 
     try:
         new_period = PeriodModel(
-            user_id = user_id,
-            start_date = data.start_date,
-            end_date = data.end_date,
-            duration = data.duration,
-            flow_intensity = data.flow_intensity,
-            mood = data.mood,
-            symptoms = data.symptoms
+            user_id=user_id,
+            start_date=data.start_date,
+            end_date=data.end_date,
+            duration=data.duration,
+            flow_intensity=data.flow_intensity,
+            mood=data.mood,
+            symptoms=data.symptoms
         )
         db.add(new_period)
-        db.commit()
-        db.refresh(new_period)
+        await db.commit()
         return new_period
 
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise e
 
-def delete_periods(start_date: date, db: Session, user_id: uuid.UUID):
-    period = db.query(PeriodModel).filter(PeriodModel.user_id == user_id, PeriodModel.start_date == start_date).first()
-
-    if not period:
-        raise HTTPException(404, detail="Period log not found")
-    
+async def delete_periods(start_date: date, db: AsyncSession, user_id: uuid.UUID):
+    stmt = (
+        delete(PeriodModel)
+        .where(PeriodModel.user_id == user_id, PeriodModel.start_date == start_date)
+        .returning(PeriodModel.id)
+    )
     try:
-        db.delete(period)
-        db.commit()
+        result = await db.execute(stmt)
+        deleted_id = result.scalars().first()
+        if not deleted_id:
+            raise HTTPException(status_code=404, detail="Period log not found")
+        await db.commit()
         return None
+    except HTTPException:
+        await db.rollback()
+        raise
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         raise e
 
-def update_daily_log(data: DailyLogSchema, db: Session, user_id: uuid.UUID):
-    log = db.query(DailyLogModel).filter(DailyLogModel.user_id == user_id, DailyLogModel.log_date == data.log_date).first()
+async def update_daily_log(data: DailyLogSchema, db: AsyncSession, user_id: uuid.UUID) -> DailyLogModel:
+    payload = data.model_dump(exclude_unset=True)
+    update_dict = {k: v for k, v in payload.items() if k != "log_date"}
+    if not update_dict:
+        update_dict = {"notes": payload.get("notes")}
 
-    if not log:
-        log = DailyLogModel(
-            user_id = user_id,
-            log_date = data.log_date,
-            moods = data.moods,
-            symptoms = data.symptoms,
-            water_intake = data.water_intake,
-            flow_intensity = data.flow_intensity,
-            physical_activity = data.physical_activity,
-            notes = data.notes
+    stmt = (
+        pg_insert(DailyLogModel)
+        .values(user_id=user_id, **payload)
+        .on_conflict_do_update(
+            index_elements=[DailyLogModel.user_id, DailyLogModel.log_date],
+            set_=update_dict
         )
-    
-    else:
-        for field, value in data.model_dump().items():
-            if value is not None:
-                setattr(log, field, value)
+        .returning(DailyLogModel)
+    )
 
-    db.add(log)
-    db.commit()
-    db.refresh(log)
+    try:
+        result = await db.execute(stmt)
+        log = result.scalars().one()
+        await db.commit()
+        return log
+    except Exception as e:
+        await db.rollback()
+        raise e
 
-    return log
-
-def get_daily_log(log_date: date, db:Session, user_id: uuid.UUID):
-    log = db.query(DailyLogModel).filter(DailyLogModel.user_id == user_id, DailyLogModel.log_date == log_date).first()
+async def get_daily_log(log_date: date, db: AsyncSession, user_id: uuid.UUID) -> DailyLogModel:
+    stmt = select(DailyLogModel).where(DailyLogModel.user_id == user_id, DailyLogModel.log_date == log_date)
+    result = await db.execute(stmt)
+    log = result.scalars().first()
     if not log:
-        raise HTTPException(404, detail="Daily log not found")
+        raise HTTPException(status_code=404, detail="Daily log not found")
     return log
 
-def trends(range : int, db: Session, user_id: uuid.UUID):
+async def trends(range: int, db: AsyncSession, user_id: uuid.UUID) -> List[DailyLogModel]:
     end_date = date.today()
     start_date = end_date - timedelta(days=range)
 
-    logs = db.query(DailyLogModel).filter(DailyLogModel.user_id == user_id, DailyLogModel.log_date >= start_date, DailyLogModel.log_date <= end_date).all()
+    stmt = select(DailyLogModel).where(
+        DailyLogModel.user_id == user_id,
+        DailyLogModel.log_date >= start_date,
+        DailyLogModel.log_date <= end_date
+    ).order_by(DailyLogModel.log_date)
+    result = await db.execute(stmt)
+    logs = list(result.scalars().all())
 
     if not logs:
-        raise HTTPException(404, detail="No logs found for the specified range")
+        raise HTTPException(status_code=404, detail="No logs found for the specified range")
     
     return logs
+
