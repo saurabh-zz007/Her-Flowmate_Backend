@@ -35,14 +35,11 @@ async def get_pregnancy(user_id: uuid.UUID, db: AsyncSession, cache: CacheServic
     cache_key = f"pregnancy:{user_id}"
     cached_data = await cache.get(cache_key)
     if cached_data:
-        print("Returning cached pregnancy data")
         return cached_data
     stmt = select(PregnancyModel).where(PregnancyModel.user_id == user_id)
     result = await db.execute(stmt)
     pregnancy_data = result.scalars().first()
     if not pregnancy_data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pregnancy data not found")
-    print("Caching pregnancy data")
     await cache.set(cache_key, pregnancy_data)
-    print("Returning pregnancy data from database")
     return pregnancy_data
