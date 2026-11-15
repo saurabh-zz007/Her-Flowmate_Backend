@@ -6,13 +6,22 @@ from src.user.router import user_route
 from src.pregnancy.router import pregnancy_router
 from src.logs.router import logs_router
 from src.auth.router import auth_router
+from src.utils.redis import create_redis
+import redis.asyncio as redis
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    yield
-    await engine.dispose()
+
+    app.state.redis = await create_redis()
+
+    try:
+        yield
+    finally:
+        await app.state.redis.aclose()
+        await engine.dispose()
 
 app = FastAPI(title="Her-Flowmate", lifespan=lifespan)
 

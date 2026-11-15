@@ -6,7 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.pregnancy.data_transfer_objects import PregnancySchema
 from src.pregnancy.models import PregnancyModel
 
-async def create_pregnancy(data: PregnancySchema, user_id: uuid.UUID, db: AsyncSession):
+from src.utils.cache_service import CacheService
+
+
+async def create_pregnancy(data: PregnancySchema, user_id: uuid.UUID, db: AsyncSession, cache: CacheService):
+    cache_key = f"pregnancy:{user_id}"
     payload = data.model_dump(exclude_unset=True)
     stmt = (
         pg_insert(PregnancyModel)
@@ -21,15 +25,21 @@ async def create_pregnancy(data: PregnancySchema, user_id: uuid.UUID, db: AsyncS
         result = await db.execute(stmt)
         pregnancy_data = result.scalars().one()
         await db.commit()
+        await cache.delete(cache_key)
         return pregnancy_data
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=400, detail=f"Error creating pregnancy: {str(e)}")
 
-async def get_pregnancy(user_id: uuid.UUID, db: AsyncSession):
+async def get_pregnancy(user_id: uuid.UUID, db: AsyncSession, cache: CacheService):
+    cache_key = f"pregnancy:{user_id}"
+    cached_data = await cache.get(cache_key)
+    if cached_data:
+        return cached_data
     stmt = select(PregnancyModel).where(PregnancyModel.user_id == user_id)
     result = await db.execute(stmt)
     pregnancy_data = result.scalars().first()
     if not pregnancy_data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pregnancy data not found")
-    return pregnancy_data
+    await cache.set(cache_key, pregnancy_data)
+    return pregnancy_data
