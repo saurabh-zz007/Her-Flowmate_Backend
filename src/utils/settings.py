@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     DB_CONNECTION: str
     ALGORITHM: str
     SECRET_KEY: str
+    REDIS_CACHING_URL: str
 
 
 settings = Settings() #type:ignore
